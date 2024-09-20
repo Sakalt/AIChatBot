@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI ChatBot with LSTM and Translation</title>
+  <title>AI チャットボットと翻訳機能</title> <!-- タイトルを日本語に修正 -->
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -45,6 +45,10 @@
       margin-left: 10px;
       cursor: pointer;
     }
+    .error {
+      color: red;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -53,23 +57,30 @@
   <div class="messages" id="messages"></div>
   <input type="text" id="userInput" placeholder="メッセージを入力してください...">
   <button onclick="sendMessage()">送信</button>
+  <div class="error" id="errorMessage"></div> <!-- エラーメッセージ表示用 -->
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/brain.js"></script>
 <script>
   const messagesElement = document.getElementById('messages');
   const userInputElement = document.getElementById('userInput');
+  const errorMessageElement = document.getElementById('errorMessage');
   let net = new brain.recurrent.LSTM();  // LSTMモデルの初期化
 
-  // JSONモデルを読み込む（chatbot-model.jsonを指定したパスから取得）
+  // JSONモデルを読み込む（相対パスを指定）
   async function loadModel() {
-    const response = await fetch('chatbot-model.json'); // 'chatbot-model.json' が存在する場所に置く
+    const response = await fetch('./chatbot-model.json'); // './chatbot-model.json' を指定
+    if (!response.ok) {
+      throw new Error('モデルの読み込みに失敗しました。');
+    }
     const modelData = await response.json();
     net.fromJSON(modelData);  // モデルデータを復元
   }
 
   // ページが読み込まれたときにLSTMモデルを読み込む
-  loadModel();
+  loadModel().catch(error => {
+    displayError('モデルの読み込みに失敗しました。'); // エラーメッセージを表示
+  });
 
   // チャットのメッセージを表示する関数
   function appendMessage(sender, text) {
@@ -79,6 +90,11 @@
     messageElement.innerText = `${sender}: ${text}`;
     messagesElement.appendChild(messageElement);
     messagesElement.scrollTop = messagesElement.scrollHeight;  // 自動スクロール
+  }
+
+  // エラーメッセージを表示する関数
+  function displayError(message) {
+    errorMessageElement.innerText = message; // エラーメッセージを更新
   }
 
   // LibreTranslate APIを使って翻訳する関数
@@ -102,18 +118,28 @@
     const userInput = userInputElement.value;
     if (!userInput.trim()) return;  // 空の入力は無視する
     appendMessage('User', userInput);
+    errorMessageElement.innerText = ''; // エラーメッセージをクリア
     
-    // ユーザーの入力を英語に翻訳する（LSTMは英語のデータで訓練されている想定）
-    const userInputInEnglish = await translate(userInput, 'en');
-    
-    // AIからの応答を取得
-    const botResponseInEnglish = net.run(userInputInEnglish);
-    
-    // AIの応答を日本語に翻訳
-    const botResponseInJapanese = await translate(botResponseInEnglish, 'ja');
-    
-    // AIの応答を表示
-    appendMessage('Bot', botResponseInJapanese);
+    try {
+      // ユーザーの入力を英語に翻訳する
+      const userInputInEnglish = await translate(userInput, 'en');
+      console.log('Translated User Input:', userInputInEnglish);  // デバッグ用ログ
+      
+      // AIからの応答を取得
+      const botResponseInEnglish = net.run(userInputInEnglish);
+      console.log('AI Response (English):', botResponseInEnglish);  // デバッグ用ログ
+      
+      if (!botResponseInEnglish) {
+        throw new Error('AI response is undefined');
+      }
+      
+      // AIの応答を日本語に翻訳
+      const botResponseInJapanese = await translate(botResponseInEnglish, 'ja');
+      appendMessage('Bot', botResponseInJapanese);
+    } catch (error) {
+      console.error('Error:', error);
+      displayError('エラーが発生しました: ' + error.message); // エラーメッセージを表示
+    }
     
     // 入力欄をクリア
     userInputElement.value = '';
