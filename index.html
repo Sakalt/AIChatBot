@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI ChatBot with LSTM and Translation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .chat-container {
+      width: 100%;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    .messages {
+      height: 300px;
+      overflow-y: scroll;
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 20px;
+    }
+    .message {
+      margin: 10px 0;
+    }
+    .bot-message {
+      color: blue;
+    }
+    .user-message {
+      color: green;
+    }
+    input[type="text"] {
+      width: calc(100% - 120px);
+      padding: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      margin-left: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div class="chat-container">
+  <div class="messages" id="messages"></div>
+  <input type="text" id="userInput" placeholder="メッセージを入力してください...">
+  <button onclick="sendMessage()">送信</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/brain.js"></script>
+<script>
+  const messagesElement = document.getElementById('messages');
+  const userInputElement = document.getElementById('userInput');
+  let net = new brain.recurrent.LSTM();  // LSTMモデルの初期化
+
+  // JSONモデルを読み込む（chatbot-model.jsonを指定したパスから取得）
+  async function loadModel() {
+    const response = await fetch('chatbot-model.json'); // 'chatbot-model.json' が存在する場所に置く
+    const modelData = await response.json();
+    net.fromJSON(modelData);  // モデルデータを復元
+  }
+
+  // ページが読み込まれたときにLSTMモデルを読み込む
+  loadModel();
+
+  // チャットのメッセージを表示する関数
+  function appendMessage(sender, text) {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('message');
+    messageElement.classList.add(sender === 'bot' ? 'bot-message' : 'user-message');
+    messageElement.innerText = `${sender}: ${text}`;
+    messagesElement.appendChild(messageElement);
+    messagesElement.scrollTop = messagesElement.scrollHeight;  // 自動スクロール
+  }
+
+  // LibreTranslate APIを使って翻訳する関数
+  async function translate(text, targetLang) {
+    const response = await fetch('https://libretranslate.com/translate', {
+      method: 'POST',
+      body: JSON.stringify({
+        q: text,
+        source: 'auto',  // 自動的に入力の言語を検出
+        target: targetLang,  // 目的言語
+        format: 'text'
+      }),
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await response.json();
+    return data.translatedText;  // 翻訳されたテキストを返す
+  }
+
+  // メッセージ送信およびAIとの対話を処理する関数
+  async function sendMessage() {
+    const userInput = userInputElement.value;
+    if (!userInput.trim()) return;  // 空の入力は無視する
+    appendMessage('User', userInput);
+    
+    // ユーザーの入力を英語に翻訳する（LSTMは英語のデータで訓練されている想定）
+    const userInputInEnglish = await translate(userInput, 'en');
+    
+    // AIからの応答を取得
+    const botResponseInEnglish = net.run(userInputInEnglish);
+    
+    // AIの応答を日本語に翻訳
+    const botResponseInJapanese = await translate(botResponseInEnglish, 'ja');
+    
+    // AIの応答を表示
+    appendMessage('Bot', botResponseInJapanese);
+    
+    // 入力欄をクリア
+    userInputElement.value = '';
+  }
+</script>
+
+</body>
+</html>
